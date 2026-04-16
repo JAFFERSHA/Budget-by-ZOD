@@ -5,6 +5,7 @@ import { StatsCard } from '@/components/dashboard/StatsCard'
 import { RecentTransactions } from '@/components/dashboard/RecentTransactions'
 import { BudgetProgress } from '@/components/dashboard/BudgetProgress'
 import { SavingsSuggestions } from '@/components/dashboard/SavingsSuggestions'
+import { DailyCalculator } from '@/components/dashboard/DailyCalculator'
 import { ExpenseBarChart } from '@/components/charts/ExpenseBarChart'
 import { CategoryPieChart } from '@/components/charts/CategoryPieChart'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
@@ -136,6 +137,9 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Daily Spend Calculator */}
+        <DailyCalculator transactions={allTransactions} currency={currency} />
 
         {/* Bottom row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

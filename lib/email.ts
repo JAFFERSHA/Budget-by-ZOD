@@ -1,11 +1,18 @@
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM   = process.env.EMAIL_FROM ?? 'Budget by ZOD <noreply@budgetbyzod.com>'
-const APP    = process.env.NEXT_PUBLIC_APP_NAME ?? 'Budget by ZOD'
-const URL    = process.env.NEXT_PUBLIC_APP_URL  ?? 'http://localhost:3000'
+const APP = process.env.NEXT_PUBLIC_APP_NAME ?? 'Budget by ZOD'
+const URL = process.env.NEXT_PUBLIC_APP_URL  ?? 'http://localhost:3000'
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+function createTransport() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  })
+}
+
 function baseLayout(body: string): string {
   return `
 <!DOCTYPE html>
@@ -48,121 +55,97 @@ function baseLayout(body: string): string {
 </html>`
 }
 
-// ── exported senders ──────────────────────────────────────────────────────────
+async function sendMail(to: string, subject: string, html: string) {
+  const transporter = createTransport()
+  await transporter.sendMail({
+    from:    `${APP} <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
+  })
+}
+
 export async function sendBudgetExceededEmail(opts: {
-  to:       string
-  name:     string
-  category: string
-  spent:    number
-  budget:   number
-  currency: string
+  to: string; name: string; category: string
+  spent: number; budget: number; currency: string
 }): Promise<void> {
   const over = opts.spent - opts.budget
   const pct  = ((opts.spent / opts.budget) * 100).toFixed(0)
 
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `⚠️ Budget Alert: ${opts.category} limit exceeded`,
-    html:    baseLayout(`
-      <p>Hi <strong>${opts.name}</strong>,</p>
-      <p>Your <strong>${opts.category}</strong> budget has been exceeded this month.</p>
-      <div class="card">
-        <div class="amount">${opts.currency} ${opts.spent.toFixed(2)}</div>
-        <p style="margin:4px 0;color:#6b7280">Spent · Budget was ${opts.currency} ${opts.budget.toFixed(2)}</p>
-        <span class="badge-red">${pct}% of budget used · ${opts.currency} ${over.toFixed(2)} over</span>
-      </div>
-      <p>Consider reviewing your ${opts.category} spending to get back on track.</p>
-      <a href="${URL}/dashboard/budget" class="btn">View Budget</a>
-    `),
-  })
+  await sendMail(opts.to, `⚠️ Budget Alert: ${opts.category} limit exceeded`, baseLayout(`
+    <p>Hi <strong>${opts.name}</strong>,</p>
+    <p>Your <strong>${opts.category}</strong> budget has been exceeded this month.</p>
+    <div class="card">
+      <div class="amount">${opts.currency} ${opts.spent.toFixed(2)}</div>
+      <p style="margin:4px 0;color:#6b7280">Spent · Budget was ${opts.currency} ${opts.budget.toFixed(2)}</p>
+      <span class="badge-red">${pct}% of budget used · ${opts.currency} ${over.toFixed(2)} over</span>
+    </div>
+    <p>Consider reviewing your ${opts.category} spending to get back on track.</p>
+    <a href="${URL}/dashboard/budget" class="btn">View Budget</a>
+  `))
 }
 
 export async function sendLowBalanceEmail(opts: {
-  to:         string
-  name:       string
-  balance:    number
-  threshold:  number
-  currency:   string
+  to: string; name: string; balance: number; threshold: number; currency: string
 }): Promise<void> {
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `🔴 Low Balance Alert — ${opts.currency} ${opts.balance.toFixed(2)} remaining`,
-    html:    baseLayout(`
-      <p>Hi <strong>${opts.name}</strong>,</p>
-      <p>Your account balance has dropped below your alert threshold of <strong>${opts.currency} ${opts.threshold.toFixed(2)}</strong>.</p>
-      <div class="card">
-        <div class="amount" style="color:#dc2626">${opts.currency} ${opts.balance.toFixed(2)}</div>
-        <p style="margin:4px 0;color:#6b7280">Current Balance</p>
-        <span class="badge-red">Below ${opts.currency} ${opts.threshold.toFixed(2)} threshold</span>
-      </div>
-      <p>Review your recent transactions and consider reducing discretionary spending.</p>
-      <a href="${URL}/dashboard" class="btn">Go to Dashboard</a>
-    `),
-  })
+  await sendMail(opts.to, `🔴 Low Balance Alert — ${opts.currency} ${opts.balance.toFixed(2)} remaining`, baseLayout(`
+    <p>Hi <strong>${opts.name}</strong>,</p>
+    <p>Your balance has dropped below your alert threshold of <strong>${opts.currency} ${opts.threshold.toFixed(2)}</strong>.</p>
+    <div class="card">
+      <div class="amount" style="color:#dc2626">${opts.currency} ${opts.balance.toFixed(2)}</div>
+      <p style="margin:4px 0;color:#6b7280">Current Balance</p>
+      <span class="badge-red">Below ${opts.currency} ${opts.threshold.toFixed(2)} threshold</span>
+    </div>
+    <p>Review your recent transactions and consider reducing discretionary spending.</p>
+    <a href="${URL}/dashboard" class="btn">Go to Dashboard</a>
+  `))
 }
 
 export async function sendWeeklySummaryEmail(opts: {
-  to:        string
-  name:      string
-  income:    number
-  expenses:  number
-  balance:   number
-  currency:  string
-  topCategory: string
-  savingsRate: number
+  to: string; name: string; income: number; expenses: number
+  balance: number; currency: string; topCategory: string; savingsRate: number
 }): Promise<void> {
   const saved = opts.income - opts.expenses
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `📊 Your Weekly Financial Summary`,
-    html:    baseLayout(`
-      <p>Hi <strong>${opts.name}</strong>, here's your weekly snapshot:</p>
-      <div class="card">
-        <table style="width:100%;border-collapse:collapse">
-          <tr>
-            <td style="padding:8px 0;color:#6b7280">Total Income</td>
-            <td style="text-align:right;font-weight:600;color:#16a34a">${opts.currency} ${opts.income.toFixed(2)}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0;color:#6b7280">Total Expenses</td>
-            <td style="text-align:right;font-weight:600;color:#dc2626">${opts.currency} ${opts.expenses.toFixed(2)}</td>
-          </tr>
-          <tr style="border-top:1px solid #e5e7eb">
-            <td style="padding:12px 0 4px;font-weight:600">Balance</td>
-            <td style="text-align:right;font-weight:700;font-size:18px;color:#4f46e5">${opts.currency} ${opts.balance.toFixed(2)}</td>
-          </tr>
-        </table>
-      </div>
-      <p>🏆 Top spending category: <strong>${opts.topCategory}</strong></p>
-      <p>💰 Savings rate this period: <strong>${opts.savingsRate.toFixed(1)}%</strong>
-         ${opts.savingsRate >= 20 ? '<span class="badge-green">On Track</span>' : '<span class="badge-red">Needs Work</span>'}</p>
-      ${saved > 0
-        ? `<p style="color:#16a34a">✅ You saved <strong>${opts.currency} ${saved.toFixed(2)}</strong> — great work!</p>`
-        : `<p style="color:#dc2626">⚠️ You spent <strong>${opts.currency} ${Math.abs(saved).toFixed(2)}</strong> more than you earned this period.</p>`
-      }
-      <a href="${URL}/dashboard/analytics" class="btn">View Full Report</a>
-    `),
-  })
+  await sendMail(opts.to, `📊 Your Weekly Financial Summary`, baseLayout(`
+    <p>Hi <strong>${opts.name}</strong>, here's your weekly snapshot:</p>
+    <div class="card">
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="padding:8px 0;color:#6b7280">Total Income</td>
+          <td style="text-align:right;font-weight:600;color:#16a34a">${opts.currency} ${opts.income.toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#6b7280">Total Expenses</td>
+          <td style="text-align:right;font-weight:600;color:#dc2626">${opts.currency} ${opts.expenses.toFixed(2)}</td>
+        </tr>
+        <tr style="border-top:1px solid #e5e7eb">
+          <td style="padding:12px 0 4px;font-weight:600">Balance</td>
+          <td style="text-align:right;font-weight:700;font-size:18px;color:#4f46e5">${opts.currency} ${opts.balance.toFixed(2)}</td>
+        </tr>
+      </table>
+    </div>
+    <p>🏆 Top spending: <strong>${opts.topCategory}</strong></p>
+    <p>💰 Savings rate: <strong>${opts.savingsRate.toFixed(1)}%</strong>
+       ${opts.savingsRate >= 20
+         ? '<span class="badge-green">On Track</span>'
+         : '<span class="badge-red">Needs Work</span>'}</p>
+    ${saved > 0
+      ? `<p style="color:#16a34a">✅ You saved <strong>${opts.currency} ${saved.toFixed(2)}</strong> this period!</p>`
+      : `<p style="color:#dc2626">⚠️ You spent <strong>${opts.currency} ${Math.abs(saved).toFixed(2)}</strong> more than you earned.</p>`}
+    <a href="${URL}/dashboard/analytics" class="btn">View Full Report</a>
+  `))
 }
 
 export async function sendWelcomeEmail(opts: { to: string; name: string }): Promise<void> {
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `Welcome to ${APP} 🎉`,
-    html:    baseLayout(`
-      <p>Hi <strong>${opts.name}</strong>, welcome aboard!</p>
-      <p>${APP} is your personal finance companion. Here's how to get started:</p>
-      <ol style="padding-left:20px;line-height:2">
-        <li>Set your <strong>monthly income</strong> in Settings</li>
-        <li>Add your first <strong>transaction</strong></li>
-        <li>Set <strong>budget limits</strong> per category</li>
-        <li>Watch the <strong>analytics</strong> work their magic</li>
-      </ol>
-      <a href="${URL}/dashboard" class="btn">Go to Dashboard</a>
-    `),
-  })
+  await sendMail(opts.to, `Welcome to ${APP} 🎉`, baseLayout(`
+    <p>Hi <strong>${opts.name}</strong>, welcome aboard!</p>
+    <p>${APP} is your personal finance companion. Here's how to get started:</p>
+    <ol style="padding-left:20px;line-height:2">
+      <li>Set your <strong>monthly income</strong> in Settings</li>
+      <li>Add your first <strong>transaction</strong></li>
+      <li>Set <strong>budget limits</strong> per category</li>
+      <li>Watch the <strong>analytics</strong> work their magic</li>
+    </ol>
+    <a href="${URL}/dashboard" class="btn">Go to Dashboard</a>
+  `))
 }

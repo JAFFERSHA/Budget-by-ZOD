@@ -1,0 +1,42 @@
+name: Push Database Schema (runs once then self-deletes)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/db-push.yml'
+
+jobs:
+  db-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Push Prisma schema to Supabase
+        run: npx prisma db push --accept-data-loss
+        env:
+          DATABASE_URL: "postgresql://postgres:Z5tjETAOA3Z6tOel@db.ubuzowujsrxycduadfxl.supabase.co:5432/postgres"
+          DIRECT_URL: "postgresql://postgres:Z5tjETAOA3Z6tOel@db.ubuzowujsrxycduadfxl.supabase.co:5432/postgres"
+
+      - name: Self-destruct
+        run: |
+          git config user.email "noreply@anthropic.com"
+          git config user.name "Claude"
+          git pull --rebase
+          git rm .github/workflows/db-push.yml
+          git commit -m "chore: remove db-push workflow — schema pushed successfully"
+          git push

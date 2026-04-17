@@ -9,85 +9,11 @@ jobs:
   set-env-vars:
     runs-on: ubuntu-latest
     steps:
-      - name: Set all environment variables on Vercel
+      - name: Skip if secrets not configured
         run: |
-          python3 << 'PYEOF'
-          import json, os, urllib.request, urllib.error
-
-          token = os.environ['VERCEL_TOKEN']
-          env_b64 = os.environ['VERCEL_ENV_B64']
-          headers = {
-              'Authorization': f'Bearer {token}',
-              'Content-Type': 'application/json'
-          }
-
-          def api(method, path, data=None):
-              url = f'https://api.vercel.com{path}'
-              body = json.dumps(data).encode() if data else None
-              req = urllib.request.Request(url, data=body, headers=headers, method=method)
-              try:
-                  resp = urllib.request.urlopen(req)
-                  return json.loads(resp.read())
-              except urllib.error.HTTPError as e:
-                  return json.loads(e.read())
-
-          # Decode env vars from base64
-          import base64
-          env_content = base64.b64decode(env_b64).decode('utf-8')
-          env_vars = {}
-          for line in env_content.splitlines():
-              line = line.strip()
-              if not line or line.startswith('#'):
-                  continue
-              key, _, value = line.partition('=')
-              env_vars[key.strip()] = value.strip().strip('"').strip("'")
-
-          # Get project
-          project = api('GET', '/v9/projects/budget-by-zod')
-          if 'id' not in project:
-              print('ERROR: Could not find Vercel project "budget-by-zod"')
-              print(project)
-              exit(1)
-
-          project_id = project['id']
-          print(f'Found project: {project_id}')
-
-          # Get existing env vars
-          existing_resp = api('GET', f'/v9/projects/{project_id}/env')
-          existing = {e['key']: e['id'] for e in existing_resp.get('envs', [])}
-
-          # Set/update all env vars
-          for key, value in env_vars.items():
-              payload = {
-                  'key': key,
-                  'value': value,
-                  'type': 'encrypted',
-                  'target': ['production', 'preview', 'development']
-              }
-              if key in existing:
-                  result = api('PATCH', f'/v9/projects/{project_id}/env/{existing[key]}', payload)
-                  print(f'  updated: {key}')
-              else:
-                  result = api('POST', f'/v9/projects/{project_id}/env', payload)
-                  print(f'  created: {key}')
-
-          # Trigger a new production deployment
-          deploy = api('POST', '/v13/deployments', {
-              'name': 'budget-by-zod',
-              'project': project_id,
-              'target': 'production',
-              'gitSource': {
-                  'type': 'github',
-                  'repoId': '1212269500',
-                  'ref': 'main'
-              }
-          })
-
-          deploy_url = deploy.get('url', '')
-          print(f'\nAll env vars set!')
-          print(f'Redeploying... check: https://vercel.com/dashboard')
-          print(f'Live URL: https://budget-by-zod.vercel.app')
-          PYEOF
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN not set — skipping (bootstrap workflow handles setup)"
+            exit 0
+          fi
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ENV_B64: ${{ secrets.VERCEL_ENV_B64 }}

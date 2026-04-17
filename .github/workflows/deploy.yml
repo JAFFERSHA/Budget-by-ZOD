@@ -1,4 +1,4 @@
-name: Deploy to Vercel
+name: Set Vercel Environment Variables
 
 on:
   push:
@@ -6,30 +6,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  set-env-vars:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Decode env vars
-        run: echo "${{ secrets.VERCEL_ENV_B64 }}" | base64 -d > .env
-
-      - name: Setup Vercel project and environment variables
+      - name: Set all environment variables on Vercel
         run: |
           python3 << 'PYEOF'
           import json, os, urllib.request, urllib.error
 
           token = os.environ['VERCEL_TOKEN']
+          env_b64 = os.environ['VERCEL_ENV_B64']
           headers = {
               'Authorization': f'Bearer {token}',
               'Content-Type': 'application/json'
@@ -45,32 +31,32 @@ jobs:
               except urllib.error.HTTPError as e:
                   return json.loads(e.read())
 
-          # Parse .env file
+          # Decode env vars from base64
+          import base64
+          env_content = base64.b64decode(env_b64).decode('utf-8')
           env_vars = {}
-          with open('.env') as f:
-              for line in f:
-                  line = line.strip()
-                  if not line or line.startswith('#'):
-                      continue
-                  key, _, value = line.partition('=')
-                  env_vars[key.strip()] = value.strip().strip('"').strip("'")
+          for line in env_content.splitlines():
+              line = line.strip()
+              if not line or line.startswith('#'):
+                  continue
+              key, _, value = line.partition('=')
+              env_vars[key.strip()] = value.strip().strip('"').strip("'")
 
-          # Get or create Vercel project
+          # Get project
           project = api('GET', '/v9/projects/budget-by-zod')
-          if 'error' in project or 'id' not in project:
-              print('Creating new Vercel project...')
-              project = api('POST', '/v9/projects', {
-                  'name': 'budget-by-zod',
-                  'framework': 'nextjs'
-              })
-          project_id = project['id']
-          print(f'Project ID: {project_id}')
+          if 'id' not in project:
+              print('ERROR: Could not find Vercel project "budget-by-zod"')
+              print(project)
+              exit(1)
 
-          # Get existing env vars to avoid duplicates
+          project_id = project['id']
+          print(f'Found project: {project_id}')
+
+          # Get existing env vars
           existing_resp = api('GET', f'/v9/projects/{project_id}/env')
           existing = {e['key']: e['id'] for e in existing_resp.get('envs', [])}
 
-          # Set all env vars on Vercel
+          # Set/update all env vars
           for key, value in env_vars.items():
               payload = {
                   'key': key,
@@ -80,35 +66,28 @@ jobs:
               }
               if key in existing:
                   result = api('PATCH', f'/v9/projects/{project_id}/env/{existing[key]}', payload)
+                  print(f'  updated: {key}')
               else:
                   result = api('POST', f'/v9/projects/{project_id}/env', payload)
-              status = 'updated' if key in existing else 'created'
-              print(f'  {status}: {key}')
+                  print(f'  created: {key}')
 
-          # Get org ID
-          user = api('GET', '/v2/user')
-          org_id = user['user']['id']
+          # Trigger a new production deployment
+          deploy = api('POST', '/v13/deployments', {
+              'name': 'budget-by-zod',
+              'project': project_id,
+              'target': 'production',
+              'gitSource': {
+                  'type': 'github',
+                  'repoId': '1212269500',
+                  'ref': 'main'
+              }
+          })
 
-          # Write .vercel/project.json so CLI links to correct project
-          os.makedirs('.vercel', exist_ok=True)
-          with open('.vercel/project.json', 'w') as f:
-              json.dump({'projectId': project_id, 'orgId': org_id}, f)
-
-          print(f'\nVercel project ready: {project_id}')
+          deploy_url = deploy.get('url', '')
+          print(f'\nAll env vars set!')
+          print(f'Redeploying... check: https://vercel.com/dashboard')
+          print(f'Live URL: https://budget-by-zod.vercel.app')
           PYEOF
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-
-      - name: Push database schema
-        run: npx prisma db push --accept-data-loss
-        continue-on-error: true
-
-      - name: Deploy to Vercel
-        id: deploy
-        run: |
-          DEPLOY_URL=$(npx vercel --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" 2>&1 | grep -E "https://[a-z0-9-]+\.vercel\.app" | tail -1)
-          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
-          echo ""
-          echo "=========================================="
-          echo "  DEPLOYED: $DEPLOY_URL"
-          echo "=========================================="
+          VERCEL_ENV_B64: ${{ secrets.VERCEL_ENV_B64 }}

@@ -1,9 +1,16 @@
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM   = process.env.EMAIL_FROM ?? 'Budget by ZOD <noreply@budgetbyzod.com>'
-const APP    = process.env.NEXT_PUBLIC_APP_NAME ?? 'Budget by ZOD'
-const URL    = process.env.NEXT_PUBLIC_APP_URL  ?? 'http://localhost:3000'
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
+  },
+})
+
+const FROM = `Budget by ZOD <${process.env.EMAIL_USER ?? 'noreply@gmail.com'}>`
+const APP  = process.env.NEXT_PUBLIC_APP_NAME ?? 'Budget by ZOD'
+const URL  = process.env.NEXT_PUBLIC_APP_URL  ?? 'http://localhost:3000'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 function baseLayout(body: string): string {
@@ -48,6 +55,10 @@ function baseLayout(body: string): string {
 </html>`
 }
 
+async function sendMail(to: string, subject: string, html: string): Promise<void> {
+  await transporter.sendMail({ from: FROM, to, subject, html })
+}
+
 // ── exported senders ──────────────────────────────────────────────────────────
 export async function sendBudgetExceededEmail(opts: {
   to:       string
@@ -60,11 +71,10 @@ export async function sendBudgetExceededEmail(opts: {
   const over = opts.spent - opts.budget
   const pct  = ((opts.spent / opts.budget) * 100).toFixed(0)
 
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `⚠️ Budget Alert: ${opts.category} limit exceeded`,
-    html:    baseLayout(`
+  await sendMail(
+    opts.to,
+    `⚠️ Budget Alert: ${opts.category} limit exceeded`,
+    baseLayout(`
       <p>Hi <strong>${opts.name}</strong>,</p>
       <p>Your <strong>${opts.category}</strong> budget has been exceeded this month.</p>
       <div class="card">
@@ -75,21 +85,20 @@ export async function sendBudgetExceededEmail(opts: {
       <p>Consider reviewing your ${opts.category} spending to get back on track.</p>
       <a href="${URL}/dashboard/budget" class="btn">View Budget</a>
     `),
-  })
+  )
 }
 
 export async function sendLowBalanceEmail(opts: {
-  to:         string
-  name:       string
-  balance:    number
-  threshold:  number
-  currency:   string
+  to:        string
+  name:      string
+  balance:   number
+  threshold: number
+  currency:  string
 }): Promise<void> {
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `🔴 Low Balance Alert — ${opts.currency} ${opts.balance.toFixed(2)} remaining`,
-    html:    baseLayout(`
+  await sendMail(
+    opts.to,
+    `🔴 Low Balance Alert — ${opts.currency} ${opts.balance.toFixed(2)} remaining`,
+    baseLayout(`
       <p>Hi <strong>${opts.name}</strong>,</p>
       <p>Your account balance has dropped below your alert threshold of <strong>${opts.currency} ${opts.threshold.toFixed(2)}</strong>.</p>
       <div class="card">
@@ -100,25 +109,24 @@ export async function sendLowBalanceEmail(opts: {
       <p>Review your recent transactions and consider reducing discretionary spending.</p>
       <a href="${URL}/dashboard" class="btn">Go to Dashboard</a>
     `),
-  })
+  )
 }
 
 export async function sendWeeklySummaryEmail(opts: {
-  to:        string
-  name:      string
-  income:    number
-  expenses:  number
-  balance:   number
-  currency:  string
+  to:          string
+  name:        string
+  income:      number
+  expenses:    number
+  balance:     number
+  currency:    string
   topCategory: string
   savingsRate: number
 }): Promise<void> {
   const saved = opts.income - opts.expenses
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `📊 Your Weekly Financial Summary`,
-    html:    baseLayout(`
+  await sendMail(
+    opts.to,
+    `📊 Your Weekly Financial Summary`,
+    baseLayout(`
       <p>Hi <strong>${opts.name}</strong>, here's your weekly snapshot:</p>
       <div class="card">
         <table style="width:100%;border-collapse:collapse">
@@ -145,15 +153,14 @@ export async function sendWeeklySummaryEmail(opts: {
       }
       <a href="${URL}/dashboard/analytics" class="btn">View Full Report</a>
     `),
-  })
+  )
 }
 
 export async function sendWelcomeEmail(opts: { to: string; name: string }): Promise<void> {
-  await resend.emails.send({
-    from:    FROM,
-    to:      opts.to,
-    subject: `Welcome to ${APP} 🎉`,
-    html:    baseLayout(`
+  await sendMail(
+    opts.to,
+    `Welcome to ${APP} 🎉`,
+    baseLayout(`
       <p>Hi <strong>${opts.name}</strong>, welcome aboard!</p>
       <p>${APP} is your personal finance companion. Here's how to get started:</p>
       <ol style="padding-left:20px;line-height:2">
@@ -164,5 +171,5 @@ export async function sendWelcomeEmail(opts: { to: string; name: string }): Prom
       </ol>
       <a href="${URL}/dashboard" class="btn">Go to Dashboard</a>
     `),
-  })
+  )
 }

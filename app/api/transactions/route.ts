@@ -9,21 +9,31 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = req.nextUrl
-  const type     = searchParams.get('type') as 'CREDIT' | 'DEBIT' | null
-  const category = searchParams.get('category')
-  const dateFrom = searchParams.get('dateFrom')
-  const dateTo   = searchParams.get('dateTo')
-  const search   = searchParams.get('search')
-  const page     = Number(searchParams.get('page')  ?? 1)
-  const perPage  = Number(searchParams.get('perPage') ?? 20)
+  const typeParam = searchParams.get('type')
+  const type      = typeParam === 'CREDIT' || typeParam === 'DEBIT' ? typeParam : null
+  const category  = searchParams.get('category')
+  const dateFrom  = searchParams.get('dateFrom')
+  const dateTo    = searchParams.get('dateTo')
+  const search    = searchParams.get('search')
+  // Clamp paging: NaN/negative/huge values used to cause a 500 or an unbounded query.
+  const pageNum    = Number(searchParams.get('page') ?? 1)
+  const perPageNum = Number(searchParams.get('perPage') ?? 20)
+  const page    = Number.isFinite(pageNum) ? Math.max(1, Math.floor(pageNum)) : 1
+  const perPage = Number.isFinite(perPageNum) ? Math.min(100, Math.max(1, Math.floor(perPageNum))) : 20
+
+  const from = dateFrom ? new Date(dateFrom) : null
+  const to   = dateTo   ? new Date(dateTo)   : null
+  if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime()))) {
+    return NextResponse.json({ error: 'Invalid date filter' }, { status: 400 })
+  }
 
   const where: Record<string, unknown> = { userId: session.user.id }
   if (type)     where.type     = type
   if (category) where.category = category
-  if (dateFrom || dateTo) {
+  if (from || to) {
     where.date = {
-      ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-      ...(dateTo   ? { lte: new Date(dateTo)   } : {}),
+      ...(from ? { gte: from } : {}),
+      ...(to   ? { lte: to   } : {}),
     }
   }
   if (search) {

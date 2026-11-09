@@ -10,6 +10,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const month = Number(searchParams.get('month') ?? new Date().getMonth() + 1)
   const year  = Number(searchParams.get('year')  ?? new Date().getFullYear())
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2020 || year > 2100) {
+    return NextResponse.json({ error: 'Invalid month or year' }, { status: 400 })
+  }
 
   const budgets = await prisma.budget.findMany({
     where: { userId: session.user.id, month, year },

@@ -3,9 +3,15 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { registerSchema } from '@/lib/validations'
 import { sendWelcomeEmail } from '@/lib/email'
+import { getClientIp, rateLimit, tooManyMessage } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
+    const limit = await rateLimit(`register:ip:${getClientIp(req.headers)}`, 10, 60 * 60)
+    if (!limit.ok) {
+      return NextResponse.json({ error: tooManyMessage(limit.retryAfterSec) }, { status: 429 })
+    }
+
     const body   = await req.json()
     const parsed = registerSchema.safeParse(body)
 

@@ -64,7 +64,7 @@ export default function NotificationsPage() {
           <div className="text-center py-20 text-gray-400">
             <BellOff className="h-12 w-12 mx-auto mb-3 opacity-40" />
             <p className="font-medium">No notifications yet</p>
-            <p className="text-sm mt-1">You'll be alerted when budgets are exceeded or balance is low.</p>
+            <p className="text-sm mt-1">You&apos;ll be alerted when budgets are exceeded or balance is low.</p>
           </div>
         ) : (
           <div className="space-y-2">

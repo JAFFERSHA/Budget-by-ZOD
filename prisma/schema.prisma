@@ -152,3 +152,12 @@ model VerificationToken {
   @@unique([identifier, token])
   @@map("verification_tokens")
 }
+
+// Fixed-window counters for rate limiting (see lib/rate-limit.ts)
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime
+
+  @@map("rate_limits")
+}

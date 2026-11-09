@@ -144,7 +144,7 @@ export default function SettingsPage() {
                 {...register('lowBalanceAlert', { valueAsNumber: true })}
               />
               <p className="text-xs text-gray-400 -mt-2">
-                You'll receive an in-app + email alert when your balance drops below this amount.
+                You&apos;ll receive an in-app + email alert when your balance drops below this amount.
               </p>
             </CardContent>
           </Card>

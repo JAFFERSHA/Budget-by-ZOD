@@ -30,7 +30,7 @@ Users belong to a family; the family's ADMIN manages members.
 
 ## Gates
 1. `npx tsc --noEmit` — currently clean
-2. Lint — **not configured** (`npm run lint` opens an interactive ESLint setup). Mark `SKIPPED (no ESLint config)`; don't set it up unasked.
+2. `npm run lint` (`.eslintrc.json`, next/core-web-vitals) — clean; `next build` also lints.
 3. `npm run build`
 No automated test suite exists.
 
@@ -44,3 +44,5 @@ Register → login → add income + expense → dashboard totals update → set 
 ## Gotchas
 - Production DB moved from Supabase to Neon on 2026-11-09 and started empty (old data was lost).
 - Amounts: keep currency math in integers/decimals consistently — check how existing code stores amounts before adding new fields.
+
+- Login/register/OTP/test endpoints are rate-limited via `lib/rate-limit.ts` (table `RateLimit`, Postgres counter, fails open). New public endpoints that cost money or guess secrets should use it.
